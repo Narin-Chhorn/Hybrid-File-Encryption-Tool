@@ -1,0 +1,16 @@
+# Private Keys - NEVER COMMIT
+keys/**/private_key.pem
+*.pem
+
+# Data files
+data/output/*
+data/decrypted/*
+
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# IDE
+.vscode/
+.idea/
