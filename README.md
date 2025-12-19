@@ -12,7 +12,6 @@ A secure file encryption application that combines **RSA-4096** and **AES-256** 
 - [Project Structure](#project-structure)
 - [Security](#security)
 - [Technologies](#technologies)
-- [Contributing](#contributing)
 
 ## 🎯 Overview
 
