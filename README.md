@@ -206,7 +206,7 @@ Hybrid-File-Encryption-Tool/
 
 - [RSA Encryption](https://en.wikipedia.org/wiki/RSA_(cryptosystem))
 - [AES Encryption](https://en.wikipedia.org/wiki/Advanced_Encryption_Standard)
-- [Hybrid Cryptosystems](https://en.wikipedia.org/wiki/Hybrid_cryptosystem)
+- [Hybrid Encryption AES + RSA]([https://en.wikipedia.org/wiki/Hybrid_cryptosystem](https://medium.com/@chandangupta86/hybrid-encryption-the-perfect-marriage-of-rsa-and-aes-for-secure-data-transmission-399cdb95924e))
 - [PyCryptodome Documentation](https://pycryptodome.readthedocs.io/)
 
 
