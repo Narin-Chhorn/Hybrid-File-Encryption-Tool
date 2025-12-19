@@ -191,7 +191,8 @@ Hybrid-File-Encryption-Tool/
 
 ## 👤 Author
 
-**Narin Chhorn**
+**Narin Chhorn Bachelor of Telecom and Networking Specialization: Cybersecurity**
+**Course: Cryptography**
 
 - GitHub: [@Narin-Chhorn](https://github.com/Narin-Chhorn)
 - Project Link: [Hybrid-File-Encryption-Tool](https://github.com/Narin-Chhorn/Hybrid-File-Encryption-Tool)
