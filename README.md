@@ -192,17 +192,6 @@ Hybrid-File-Encryption-Tool/
 4. ⚠️ **Keep software updated** with latest security patches
 5. ⚠️ **Use strong passwords** if adding key encryption
 
-## 🖼️ Screenshots
-
-### Key Generation
-![Key Generation](docs/screenshots/key-generation.png)
-
-### File Encryption
-![Encryption](docs/screenshots/encryption.png)
-
-### File Decryption
-![Decryption](docs/screenshots/decryption.png)
-
 ## 🛠️ Technologies
 
 - **Python 3.8+**: Core programming language
