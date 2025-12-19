@@ -13,7 +13,7 @@ A secure file encryption application that combines **RSA-4096** and **AES-256** 
 - [Security](#security)
 - [Technologies](#technologies)
 
-## 🎯 [Overview](#overview)
+## 🎯 Overview
 
 This project implements a **hybrid encryption system** that securely encrypts files for transmission over insecure channels. It uses:
 - **RSA-4096** for secure key exchange
