@@ -1,10 +1,6 @@
 # 🔐 Hybrid File Encryption Tool
 
-A secure file encryption application that combines **RSA-4096** and **AES-256** encryption algorithms to provide military-grade security for file sharing.
-
-![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Status](https://img.shields.io/badge/status-active-success.svg)
+A secure file encryption application that combines **RSA-4096** and **AES-256** encryption algorithms to provide security for file sharing.
 
 ## 📋 Table of Contents
 
@@ -142,12 +138,6 @@ Hybrid-File-Encryption-Tool/
 ├── .gitignore                 # Git ignore rules
 │
 ├── keys/                      # RSA key storage
-│   ├── alice/
-│   │   ├── private_key.pem   # Alice's private key
-│   │   └── public_key.pem    # Alice's public key
-│   └── bob/
-│       ├── private_key.pem   # Bob's private key
-│       └── public_key.pem    # Bob's public key
 │
 ├── data/                      # File storage
 │   ├── input/                # Files to encrypt
@@ -178,8 +168,7 @@ Hybrid-File-Encryption-Tool/
 
 ### Security Features
 
-✅ **End-to-End Encryption**: Only the recipient can decrypt files  
-✅ **Authenticated Encryption**: GCM mode prevents tampering  
+✅ **End-to-End Encryption**: Only the recipient can decrypt files   
 ✅ **Digital Signatures**: Verify sender authenticity  
 ✅ **Key Isolation**: Private keys never transmitted  
 ✅ **Forward Secrecy**: Each encryption uses new session key  
@@ -199,7 +188,6 @@ Hybrid-File-Encryption-Tool/
 - **Tkinter**: GUI framework
 - **RSA-4096**: Asymmetric encryption
 - **AES-256-GCM**: Symmetric encryption
-- **SHA-256**: Cryptographic hashing
 
 ## 👤 Author
 
@@ -221,9 +209,6 @@ Hybrid-File-Encryption-Tool/
 - [Hybrid Cryptosystems](https://en.wikipedia.org/wiki/Hybrid_cryptosystem)
 - [PyCryptodome Documentation](https://pycryptodome.readthedocs.io/)
 
-## 🐛 Known Issues
-
-- None currently. Report issues on GitHub!
 
 ## 🔮 Future Enhancements
 
