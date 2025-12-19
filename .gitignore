@@ -3,8 +3,8 @@ keys/**/private_key.pem
 *.pem
 
 # Data files
-data/output/
-data/decrypted/
+#data/output/
+#data/decrypted/
 
 # Python
 __pycache__/
