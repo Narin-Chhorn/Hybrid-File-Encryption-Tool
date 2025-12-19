@@ -26,6 +26,7 @@ class EncryptionToolGUI:
         self.create_key_gen_tab()
         self.create_encrypt_tab()
         self.create_decrypt_tab()
+        self.update_user_lists()
         
         # Status bar
         self.status_frame = tk.Frame(self.root, bg="#333333", height=30)
