@@ -2,350 +2,328 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 import os
 import sys
+import threading
+import time
 from pathlib import Path
 
+# Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from config import KEYS_DIR, DATA_DIR
+from config import KEYS_DIR
 from src.utils.key_manager import KeyManager
 from src.core.hybrid_crypto import HybridCrypto
-from src.core.signature import SignatureHandler
-
 
 class EncryptionToolGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Hybrid File Encryption Tool")
-        self.root.geometry("800x650")
+        self.root.geometry("850x650")
         
-        # Create notebook (tabs)
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill='both', expand=True, padx=10, pady=10)
+        # Use standard theme - clean and reliable
+        self.style = ttk.Style()
+        self.style.theme_use('default') 
         
-        # Create tabs
-        self.create_key_gen_tab()
+        # Configure a clean font for everything
+        self.default_font = ("Segoe UI", 10)
+        self.style.configure(".", font=self.default_font)
+        self.style.configure("TLabel", font=self.default_font)
+        self.style.configure("TButton", font=self.default_font, padding=5)
+        
+        # Header Style
+        self.style.configure("Header.TLabel", font=("Segoe UI", 16, "bold"), foreground="#333333")
+
+        # --- LAYOUT ---
+        main_frame = ttk.Frame(self.root, padding="20")
+        main_frame.pack(fill='both', expand=True)
+        
+        # Header
+        header_frame = ttk.Frame(main_frame)
+        header_frame.pack(fill='x', pady=(0, 20))
+        ttk.Label(header_frame, text="🛡️ Hybrid File Encryption System", style="Header.TLabel").pack(side='left')
+        ttk.Label(header_frame, text="v1.0 (RSA-4096 + AES-256)", foreground="#666666").pack(side='left', padx=15, anchor='s', pady=(0, 5))
+
+        # Notebook (Tabs)
+        self.notebook = ttk.Notebook(main_frame)
+        self.notebook.pack(fill='both', expand=True)
+        
+        self.create_key_tab()
         self.create_encrypt_tab()
         self.create_decrypt_tab()
+        
+        # Status Bar
+        self.status_var = tk.StringVar(value="Ready")
+        self.status_bar = tk.Label(self.root, textvariable=self.status_var, bd=1, relief=tk.SUNKEN, anchor='w', padx=10, pady=5)
+        self.status_bar.pack(side='bottom', fill='x')
+
+        # Load users immediately
         self.update_user_lists()
-        
-        # Status bar
-        self.status_frame = tk.Frame(self.root, bg="#333333", height=30)
-        self.status_frame.pack(side='bottom', fill='x')
-        
-        self.status_label = tk.Label(
-            self.status_frame, text="Ready", bg="#333333", fg="white", anchor='w', padx=10
-        )
-        self.status_label.pack(fill='x')
-    
-    def update_status(self, message):
-        self.status_label.config(text=message)
-        self.root.update()
-    
+
+    # --- HELPERS ---
+    def log(self, widget, msg):
+        """Simple logging helper"""
+        widget.config(state='normal')
+        timestamp = time.strftime('%H:%M:%S')
+        widget.insert(tk.END, f"[{timestamp}] {msg}\n")
+        widget.see(tk.END)
+        widget.config(state='disabled')
+
+    def toggle_inputs(self, state):
+        """Disable buttons while processing"""
+        for child in self.root.winfo_children():
+            if isinstance(child, ttk.Button): child.configure(state=state)
+
+    # ==========================================
     # TAB 1: KEY GENERATION
-    def create_key_gen_tab(self):
-        tab = tk.Frame(self.notebook)
-        self.notebook.add(tab, text="🔑 Generate Keys")
+    # ==========================================
+    def create_key_tab(self):
+        tab = ttk.Frame(self.notebook, padding=15)
+        self.notebook.add(tab, text="Generate Keys")
         
-        tk.Label(tab, text="Generate RSA Key Pair", font=("Arial", 16, "bold")).pack(pady=20)
+        # Input Section
+        panel = ttk.LabelFrame(tab, text="Create New User Identity", padding=15)
+        panel.pack(fill='x', pady=(0, 15))
         
-        # Username
-        frame = tk.Frame(tab)
-        frame.pack(pady=10)
-        tk.Label(frame, text="Username:", font=("Arial", 12)).pack(side='left', padx=5)
-        self.username_entry = tk.Entry(frame, font=("Arial", 12), width=30)
-        self.username_entry.pack(side='left', padx=5)
+        frame = ttk.Frame(panel)
+        frame.pack(fill='x')
         
-        # Key size
-        frame2 = tk.Frame(tab)
-        frame2.pack(pady=10)
-        tk.Label(frame2, text="Key Size:", font=("Arial", 12)).pack(side='left', padx=5)
-        self.keysize_var = tk.StringVar(value="4096")
-        ttk.Combobox(frame2, textvariable=self.keysize_var, values=["2048", "4096"], 
-                     state='readonly', width=10).pack(side='left', padx=5)
+        ttk.Label(frame, text="Username:").pack(side='left', padx=(0, 10))
+        self.user_entry = ttk.Entry(frame, width=30)
+        self.user_entry.pack(side='left', padx=(0, 20))
         
-        # Generate button
-        tk.Button(tab, text="Generate Keys", font=("Arial", 12, "bold"), 
-                 bg="#2196F3", fg="white", padx=20, pady=10,
-                 command=self.generate_keys).pack(pady=20)
+        ttk.Button(frame, text="Generate Keys", command=self.start_keygen).pack(side='left')
         
-        # Output
-        tk.Label(tab, text="Output:", font=("Arial", 12, "bold")).pack(pady=5)
-        self.keygen_log = scrolledtext.ScrolledText(tab, height=12, width=80, font=("Courier", 10))
-        self.keygen_log.pack(pady=10, padx=20)
-    
-    def generate_keys(self):
-        username = self.username_entry.get().strip()
-        if not username:
-            messagebox.showerror("Error", "Please enter a username!")
-            return
+        # Progress Bar (Hidden by default)
+        self.key_progress = ttk.Progressbar(panel, mode='indeterminate')
+        self.key_progress.pack(fill='x', pady=(15, 0))
         
+        # Log Section
+        log_lbl = ttk.Label(tab, text="System Log:", font=("Segoe UI", 9, "bold"))
+        log_lbl.pack(anchor='w', pady=(10, 5))
+        
+        self.key_log = scrolledtext.ScrolledText(tab, height=10, state='disabled', font=("Consolas", 9))
+        self.key_log.pack(fill='both', expand=True)
+
+    def start_keygen(self):
+        user = self.user_entry.get().strip()
+        if not user: return messagebox.showerror("Error", "Username is required.")
+        
+        self.key_progress.start(10)
+        self.status_var.set(f"Generating keys for {user}...")
+        threading.Thread(target=self.run_keygen, args=(user,), daemon=True).start()
+
+    def run_keygen(self, user):
         try:
-            self.update_status("Generating keys...")
-            self.keygen_log.delete(1.0, tk.END)
-            
-            keysize = int(self.keysize_var.get())
-            self.keygen_log.insert(tk.END, f"🔑 Generating {keysize}-bit keys for '{username}'...\n\n")
-            self.root.update()
-            
-            result = KeyManager.generate_user_keys(username, key_size=keysize)
-            
-            self.keygen_log.insert(tk.END, f"✅ Keys generated!\n\n")
-            self.keygen_log.insert(tk.END, f"Private Key: {result['private_key']}\n")
-            self.keygen_log.insert(tk.END, f"Public Key: {result['public_key']}\n")
-            self.keygen_log.insert(tk.END, f"Key Size: {result['key_size']} bits\n")
-            
-            self.update_status(f"Keys generated for {username}")
+            # FIX: Explicitly using KEYS_DIR
+            res = KeyManager.generate_user_keys(user, keys_dir=KEYS_DIR)
+            self.root.after(0, lambda: self.finish_keygen(True, res))
+        except Exception as e:
+            self.root.after(0, lambda: self.finish_keygen(False, str(e)))
+
+    def finish_keygen(self, success, res):
+        self.key_progress.stop()
+        if success:
+            self.log(self.key_log, f"✅ Success: Keys generated for '{res['username']}'")
+            self.log(self.key_log, f"   Location: {KEYS_DIR}")
+            self.status_var.set("Ready")
             self.update_user_lists()
-            messagebox.showinfo("Success", f"Keys generated for {username}!")
-            
-        except Exception as e:
-            self.keygen_log.insert(tk.END, f"\n❌ ERROR: {str(e)}\n")
-            self.update_status("Error")
-            messagebox.showerror("Error", str(e))
-    
-    # TAB 2: ENCRYPT
-    def create_encrypt_tab(self):
-        tab = tk.Frame(self.notebook)
-        self.notebook.add(tab, text="🔒 Encrypt File")
-        
-        tk.Label(tab, text="Encrypt File", font=("Arial", 16, "bold")).pack(pady=20)
-        
-        # Input file
-        frame = tk.Frame(tab)
-        frame.pack(pady=10, fill='x', padx=20)
-        tk.Label(frame, text="Input File:", font=("Arial", 11)).pack(anchor='w')
-        
-        frame2 = tk.Frame(frame)
-        frame2.pack(fill='x', pady=5)
-        self.encrypt_input_entry = tk.Entry(frame2, font=("Arial", 10), width=60)
-        self.encrypt_input_entry.pack(side='left', padx=(0, 5))
-        tk.Button(frame2, text="Browse", command=self.browse_encrypt_input).pack(side='left')
-        
-        # Recipient
-        frame3 = tk.Frame(tab)
-        frame3.pack(pady=10, fill='x', padx=20)
-        tk.Label(frame3, text="Recipient:", font=("Arial", 11)).pack(anchor='w')
-        self.recipient_var = tk.StringVar()
-        self.recipient_combo = ttk.Combobox(frame3, textvariable=self.recipient_var, width=30)
-        self.recipient_combo.pack(anchor='w', pady=5)
-        
-        # Output file
-        frame4 = tk.Frame(tab)
-        frame4.pack(pady=10, fill='x', padx=20)
-        tk.Label(frame4, text="Output File:", font=("Arial", 11)).pack(anchor='w')
-        
-        frame5 = tk.Frame(frame4)
-        frame5.pack(fill='x', pady=5)
-        self.encrypt_output_entry = tk.Entry(frame5, font=("Arial", 10), width=60)
-        self.encrypt_output_entry.pack(side='left', padx=(0, 5))
-        self.encrypt_output_entry.insert(0, "data/output/encrypted_file.bin")
-        tk.Button(frame5, text="Browse", command=self.browse_encrypt_output).pack(side='left')
-        
-        # Encrypt button
-        tk.Button(tab, text="🔒 Encrypt File", font=("Arial", 12, "bold"),
-                 bg="#4CAF50", fg="white", padx=20, pady=10,
-                 command=self.encrypt_file).pack(pady=20)
-        
-        # Output
-        tk.Label(tab, text="Output:", font=("Arial", 11, "bold")).pack(pady=5)
-        self.encrypt_log = scrolledtext.ScrolledText(tab, height=8, width=80, font=("Courier", 9))
-        self.encrypt_log.pack(pady=10, padx=20)
-    
-    def browse_encrypt_input(self):
-        filename = filedialog.askopenfilename(title="Select file to encrypt")
-        if filename:
-            self.encrypt_input_entry.delete(0, tk.END)
-            self.encrypt_input_entry.insert(0, filename)
-    
-    def browse_encrypt_output(self):
-        filename = filedialog.asksaveasfilename(
-            title="Save as", defaultextension=".bin",
-            filetypes=[("Binary files", "*.bin"), ("All files", "*.*")]
-        )
-        if filename:
-            self.encrypt_output_entry.delete(0, tk.END)
-            self.encrypt_output_entry.insert(0, filename)
-    
-    def encrypt_file(self):
-        input_file = self.encrypt_input_entry.get().strip()
-        recipient = self.recipient_var.get().strip()
-        output_file = self.encrypt_output_entry.get().strip()
-        
-        if not input_file or not os.path.exists(input_file):
-            messagebox.showerror("Error", "Please select a valid input file!")
-            return
-        if not recipient:
-            messagebox.showerror("Error", "Please select a recipient!")
-            return
-        if not output_file:
-            messagebox.showerror("Error", "Please specify output file!")
-            return
-        
-        try:
-            self.update_status("Encrypting...")
-            self.encrypt_log.delete(1.0, tk.END)
-            
-            recipient_keys = KeyManager.get_user_keys(recipient)
-            os.makedirs(os.path.dirname(output_file), exist_ok=True)
-            
-            self.encrypt_log.insert(tk.END, f"🔐 Encrypting for {recipient}...\n\n")
-            self.root.update()
-            
-            result = HybridCrypto.encrypt_file(
-                input_path=input_file,
-                recipient_public_key_path=recipient_keys['public_key'],
-                output_path=output_file
-            )
-            
-            self.encrypt_log.insert(tk.END, f"✅ File encrypted!\n\n")
-            self.encrypt_log.insert(tk.END, f"Output: {result['output_file']}\n")
-            self.encrypt_log.insert(tk.END, f"Size: {result['encrypted_size']:,} bytes\n")
-            
-            self.update_status("Encryption complete")
-            messagebox.showinfo("Success", "File encrypted successfully!")
-            
-        except Exception as e:
-            self.encrypt_log.insert(tk.END, f"\n❌ ERROR: {str(e)}\n")
-            self.update_status("Error")
-            messagebox.showerror("Error", str(e))
-    
-    # TAB 3: DECRYPT
-    def create_decrypt_tab(self):
-        tab = tk.Frame(self.notebook)
-        self.notebook.add(tab, text="🔓 Decrypt File")
-        
-        tk.Label(tab, text="Decrypt File", font=("Arial", 16, "bold")).pack(pady=20)
-        
-        # Input file
-        frame = tk.Frame(tab)
-        frame.pack(pady=10, fill='x', padx=20)
-        tk.Label(frame, text="Encrypted File:", font=("Arial", 11)).pack(anchor='w')
-        
-        frame2 = tk.Frame(frame)
-        frame2.pack(fill='x', pady=5)
-        self.decrypt_input_entry = tk.Entry(frame2, font=("Arial", 10), width=60)
-        self.decrypt_input_entry.pack(side='left', padx=(0, 5))
-        tk.Button(frame2, text="Browse", command=self.browse_decrypt_input).pack(side='left')
-        
-        # User
-        frame3 = tk.Frame(tab)
-        frame3.pack(pady=10, fill='x', padx=20)
-        tk.Label(frame3, text="You are:", font=("Arial", 11)).pack(anchor='w')
-        self.decrypt_user_var = tk.StringVar()
-        self.decrypt_user_combo = ttk.Combobox(frame3, textvariable=self.decrypt_user_var, width=30)
-        self.decrypt_user_combo.pack(anchor='w', pady=5)
-        
-        # Output file
-        frame4 = tk.Frame(tab)
-        frame4.pack(pady=10, fill='x', padx=20)
-        tk.Label(frame4, text="Output File:", font=("Arial", 11)).pack(anchor='w')
-        
-        frame5 = tk.Frame(frame4)
-        frame5.pack(fill='x', pady=5)
-        self.decrypt_output_entry = tk.Entry(frame5, font=("Arial", 10), width=60)
-        self.decrypt_output_entry.pack(side='left', padx=(0, 5))
-        self.decrypt_output_entry.insert(0, "data/decrypted/")
-        tk.Button(frame5, text="Browse", command=self.browse_decrypt_output).pack(side='left')
-        
-        # Decrypt button
-        tk.Button(tab, text="🔓 Decrypt File", font=("Arial", 12, "bold"),
-                 bg="#FF9800", fg="white", padx=20, pady=10,
-                 command=self.decrypt_file).pack(pady=20)
-        
-        # Output
-        tk.Label(tab, text="Output:", font=("Arial", 11, "bold")).pack(pady=5)
-        self.decrypt_log = scrolledtext.ScrolledText(tab, height=8, width=80, font=("Courier", 9))
-        self.decrypt_log.pack(pady=10, padx=20)
-    
-    def browse_decrypt_input(self):
-        filename = filedialog.askopenfilename(
-            title="Select encrypted file",
-            filetypes=[("Binary files", "*.bin"), ("All files", "*.*")]
-        )
-        if filename:
-            self.decrypt_input_entry.delete(0, tk.END)
-            self.decrypt_input_entry.insert(0, filename)
-    
-    def browse_decrypt_output(self):
-        filename = filedialog.asksaveasfilename(title="Save decrypted file as",
-            defaultextension=".*",
-        filetypes=[
-            ("All files", "*.*"),
-            ("Text files", "*.txt"),
-            ("PDF files", "*.pdf"),
-            ("Word files", "*.docx"),
-            ("Excel files", "*.xlsx"),
-            ("Images", "*.png *.jpg *.jpeg"),  
-            ]
-        )                                      
-        if filename:
-            self.decrypt_output_entry.delete(0, tk.END)
-            self.decrypt_output_entry.insert(0, filename)
-    
-    def decrypt_file(self):
-        input_file = self.decrypt_input_entry.get().strip()
-        user = self.decrypt_user_var.get().strip()
-        output_file = self.decrypt_output_entry.get().strip()
-        
-        if not input_file or not os.path.exists(input_file):
-            messagebox.showerror("Error", "Please select a valid encrypted file!")
-            return
-        if not user:
-            messagebox.showerror("Error", "Please select your username!")
-            return
-        if not output_file:
-            messagebox.showerror("Error", "Please specify output file!")
-            return
-        
-        try:
-            self.update_status("Decrypting...")
-            self.decrypt_log.delete(1.0, tk.END)
-            
-            user_keys = KeyManager.get_user_keys(user)
-            os.makedirs(os.path.dirname(output_file), exist_ok=True)
-            
-            self.decrypt_log.insert(tk.END, f"🔓 Decrypting...\n\n")
-            self.root.update()
-            
-            result = HybridCrypto.decrypt_file(
-                input_path=input_file,
-                recipient_private_key_path=user_keys['private_key'],
-                output_path=output_file
-            )
-            
-            self.decrypt_log.insert(tk.END, f"✅ File decrypted!\n\n")
-            self.decrypt_log.insert(tk.END, f"Output: {result['output_file']}\n")
-            self.decrypt_log.insert(tk.END, f"Size: {result['decrypted_size']:,} bytes\n")
-            
-            self.update_status("Decryption complete")
-            messagebox.showinfo("Success", "File decrypted successfully!")
-            
-        except Exception as e:
-            self.decrypt_log.insert(tk.END, f"\n❌ ERROR: {str(e)}\n")
-            self.update_status("Error")
-            messagebox.showerror("Error", str(e))
-    
-    def update_user_lists(self):
-        users = KeyManager.list_users(keys_dir=KEYS_DIR) 
-    
-        if users:
-            self.recipient_combo['values'] = users
-            self.decrypt_user_combo['values'] = users
-            
-            # Optionally set the first user as the default selected user
-            if not self.decrypt_user_var.get():
-                self.decrypt_user_var.set(users[0])
-            if not self.recipient_var.get():
-                self.recipient_var.set(users[0])
+            messagebox.showinfo("Success", f"Keys created for {res['username']}!")
         else:
-            self.recipient_combo['values'] = ['Generate keys first']
-            self.decrypt_user_combo['values'] = ['Generate keys first']
+            self.log(self.key_log, f"❌ Error: {res}")
+            messagebox.showerror("Error", res)
+
+    # ==========================================
+    # TAB 2: ENCRYPTION
+    # ==========================================
+    def create_encrypt_tab(self):
+        tab = ttk.Frame(self.notebook, padding=15)
+        self.notebook.add(tab, text="Encrypt File")
+        
+        # File Selection
+        panel = ttk.LabelFrame(tab, text="Encryption Details", padding=15)
+        panel.pack(fill='x', pady=(0, 15))
+        panel.columnconfigure(1, weight=1)
+        
+        # Row 0: Input File
+        ttk.Label(panel, text="Input File:").grid(row=0, column=0, sticky='w', pady=5)
+        self.enc_file = ttk.Entry(panel)
+        self.enc_file.grid(row=0, column=1, sticky='ew', padx=10)
+        ttk.Button(panel, text="Browse...", command=lambda: self.browse_file(self.enc_file)).grid(row=0, column=2)
+        
+        # Row 1: Recipient
+        ttk.Label(panel, text="Recipient:").grid(row=1, column=0, sticky='w', pady=5)
+        self.rec_var = tk.StringVar()
+        self.rec_combo = ttk.Combobox(panel, textvariable=self.rec_var, state='readonly')
+        self.rec_combo.grid(row=1, column=1, sticky='ew', padx=10)
+        
+        # Row 2: Output File
+        ttk.Label(panel, text="Save As:").grid(row=2, column=0, sticky='w', pady=5)
+        self.enc_out = ttk.Entry(panel)
+        self.enc_out.insert(0, "data/output/encrypted_file.bin")
+        self.enc_out.grid(row=2, column=1, sticky='ew', padx=10)
+        ttk.Button(panel, text="Browse...", command=lambda: self.save_file(self.enc_out)).grid(row=2, column=2)
+        
+        # Action Button & Progress
+        self.enc_progress = ttk.Progressbar(panel, mode='indeterminate')
+        self.enc_progress.grid(row=3, column=0, columnspan=3, sticky='ew', pady=(15, 0))
+        
+        btn = ttk.Button(panel, text="🔒 Encrypt File", command=self.start_enc)
+        btn.grid(row=4, column=0, columnspan=3, sticky='ew', pady=(10, 0))
+        
+        # Log
+        self.enc_log = scrolledtext.ScrolledText(tab, height=8, state='disabled', font=("Consolas", 9))
+        self.enc_log.pack(fill='both', expand=True)
+
+    def start_enc(self):
+        if not self.enc_file.get() or not self.rec_var.get(): 
+            return messagebox.showwarning("Missing Info", "Please select a file and a recipient.")
+        
+        self.enc_progress.start(10)
+        self.status_var.set("Encrypting file...")
+        threading.Thread(target=self.run_enc, daemon=True).start()
+
+    def run_enc(self):
+        try:
+            inp = self.enc_file.get()
+            rec = self.rec_var.get()
+            out = self.enc_out.get()
+            
+            # FIX: Explicitly using KEYS_DIR
+            keys = KeyManager.get_user_keys(rec, keys_dir=KEYS_DIR)
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            
+            res = HybridCrypto.encrypt_file(inp, keys['public_key'], out)
+            self.root.after(0, lambda: self.finish_enc(True, res))
+        except Exception as e:
+            self.root.after(0, lambda: self.finish_enc(False, str(e)))
+
+    def finish_enc(self, success, res):
+        self.enc_progress.stop()
+        if success:
+            self.log(self.enc_log, f"✅ Encrypted file for user: {self.rec_var.get()}")
+            self.log(self.enc_log, f"   Original Size: {res['original_size']} bytes")
+            self.log(self.enc_log, f"   Encrypted Size: {res['encrypted_size']} bytes")
+            self.status_var.set("Encryption complete")
+            messagebox.showinfo("Success", "File Encrypted Successfully!")
+        else:
+            self.log(self.enc_log, f"❌ Error: {res}")
+            messagebox.showerror("Error", res)
+
+    # ==========================================
+    # TAB 3: DECRYPTION
+    # ==========================================
+    def create_decrypt_tab(self):
+        tab = ttk.Frame(self.notebook, padding=15)
+        self.notebook.add(tab, text="Decrypt File")
+        
+        panel = ttk.LabelFrame(tab, text="Decryption Details", padding=15)
+        panel.pack(fill='x', pady=(0, 15))
+        panel.columnconfigure(1, weight=1)
+        
+        # Row 0: Input
+        ttk.Label(panel, text="Encrypted File:").grid(row=0, column=0, sticky='w', pady=5)
+        self.dec_file = ttk.Entry(panel)
+        self.dec_file.grid(row=0, column=1, sticky='ew', padx=10)
+        ttk.Button(panel, text="Browse...", command=lambda: self.browse_file(self.dec_file)).grid(row=0, column=2)
+        
+        # Row 1: User Identity
+        ttk.Label(panel, text="I am User:").grid(row=1, column=0, sticky='w', pady=5)
+        self.dec_user_var = tk.StringVar()
+        self.dec_user_combo = ttk.Combobox(panel, textvariable=self.dec_user_var, state='readonly')
+        self.dec_user_combo.grid(row=1, column=1, sticky='ew', padx=10)
+        
+        # Row 2: Output Folder
+        ttk.Label(panel, text="Output Folder:").grid(row=2, column=0, sticky='w', pady=5)
+        self.dec_out = ttk.Entry(panel)
+        self.dec_out.insert(0, "data/decrypted/")
+        self.dec_out.grid(row=2, column=1, sticky='ew', padx=10)
+        ttk.Button(panel, text="Browse...", command=lambda: self.browse_dir(self.dec_out)).grid(row=2, column=2)
+        
+        # Action
+        self.dec_progress = ttk.Progressbar(panel, mode='indeterminate')
+        self.dec_progress.grid(row=3, column=0, columnspan=3, sticky='ew', pady=(15, 0))
+        
+        btn = ttk.Button(panel, text="🔓 Decrypt File", command=self.start_dec)
+        btn.grid(row=4, column=0, columnspan=3, sticky='ew', pady=(10, 0))
+        
+        # Log
+        self.dec_log = scrolledtext.ScrolledText(tab, height=8, state='disabled', font=("Consolas", 9))
+        self.dec_log.pack(fill='both', expand=True)
+
+    def start_dec(self):
+        if not self.dec_file.get() or not self.dec_user_var.get():
+            return messagebox.showwarning("Missing Info", "Please select the encrypted file and your username.")
+        
+        self.dec_progress.start(10)
+        self.status_var.set("Decrypting...")
+        threading.Thread(target=self.run_dec, daemon=True).start()
+
+    def run_dec(self):
+        try:
+            inp = self.dec_file.get()
+            user = self.dec_user_var.get()
+            out_dir = self.dec_out.get()
+            
+            # FIX: Explicitly using KEYS_DIR
+            keys = KeyManager.get_user_keys(user, keys_dir=KEYS_DIR)
+            
+            if not os.path.exists(out_dir): os.makedirs(out_dir)
+            
+            # Create a dummy path so logic works; real filename is extracted from metadata
+            dummy_path = os.path.join(out_dir, "placeholder")
+            
+            res = HybridCrypto.decrypt_file(inp, keys['private_key'], dummy_path)
+            self.root.after(0, lambda: self.finish_dec(True, res))
+        except Exception as e:
+            self.root.after(0, lambda: self.finish_dec(False, str(e)))
+
+    def finish_dec(self, success, res):
+        self.dec_progress.stop()
+        if success:
+            filename = os.path.basename(res['output_file'])
+            self.log(self.dec_log, f"✅ File Restored Successfully")
+            self.log(self.dec_log, f"   Saved as: {filename}")
+            self.status_var.set("Ready")
+            messagebox.showinfo("Success", f"File restored: {filename}")
+        else:
+            self.log(self.dec_log, f"❌ Decryption Failed: {res}")
+            messagebox.showerror("Error", f"Decryption Failed.\n{res}")
+
+    # --- COMMON UTILS ---
+    def browse_file(self, entry):
+        f = filedialog.askopenfilename()
+        if f: 
+            entry.delete(0, tk.END)
+            entry.insert(0, f)
+            
+    def save_file(self, entry):
+        f = filedialog.asksaveasfilename(defaultextension=".bin")
+        if f:
+            entry.delete(0, tk.END)
+            entry.insert(0, f)
+
+    def browse_dir(self, entry):
+        f = filedialog.askdirectory()
+        if f:
+            entry.delete(0, tk.END)
+            entry.insert(0, f)
+
+    def update_user_lists(self):
+        # FIX: Explicitly using KEYS_DIR
+        users = KeyManager.list_users(keys_dir=KEYS_DIR)
+        if users:
+            self.rec_combo['values'] = users
+            self.dec_user_combo['values'] = users
+            if not self.rec_var.get(): self.rec_combo.current(0)
+            if not self.dec_user_var.get(): self.dec_user_combo.current(0)
+        else:
+            msg = ["No keys found"]
+            self.rec_combo['values'] = msg
+            self.dec_user_combo['values'] = msg
 
 def main():
     root = tk.Tk()
     app = EncryptionToolGUI(root)
     root.mainloop()
-
 
 if __name__ == '__main__':
     main()
