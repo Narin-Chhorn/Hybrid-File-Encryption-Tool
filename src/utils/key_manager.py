@@ -1,22 +1,25 @@
 import os
+import re  # Added regex for validation
 from ..core.rsa_handler import RSAHandler
 
-# --- CRITICAL FIX: Ensure the absolute path is loaded from config ---
-# Use an import statement to bring in the absolute path variable.
 try:
-    # Attempt to load the absolute path defined in your config.py
     from config import KEYS_DIR
     DEFAULT_KEYS_DIR = KEYS_DIR
 except ImportError:
-    # Fallback to the relative path if the config file can't be imported 
-    # (this should only happen in very specific environments, but is safe).
     DEFAULT_KEYS_DIR = 'keys'
-
 
 class KeyManager:
     @staticmethod
+    def _validate_username(username):
+        # Allow only alphanumeric, underscores, and dashes.
+        # This prevents users from entering "../../windows"
+        if not re.match(r'^[a-zA-Z0-9_-]+$', username):
+            raise ValueError("Invalid username. Use only letters, numbers, _, or -")
+
+    @staticmethod
     def generate_user_keys(username, keys_dir=DEFAULT_KEYS_DIR, key_size=4096):
-        # The key size is 4096 by default [cite: 42, 50, 158]
+        KeyManager._validate_username(username) # Check input
+        
         user_dir = os.path.join(keys_dir, username)
         os.makedirs(user_dir, exist_ok=True)
         
@@ -37,6 +40,7 @@ class KeyManager:
 
     @staticmethod
     def get_user_keys(username, keys_dir=DEFAULT_KEYS_DIR):
+        KeyManager._validate_username(username) # Check input
         user_dir = os.path.join(keys_dir, username)
         return {
             'private_key': os.path.join(user_dir, 'private_key.pem'),
@@ -45,7 +49,6 @@ class KeyManager:
 
     @staticmethod
     def list_users(keys_dir=DEFAULT_KEYS_DIR):
-        # This function now uses the absolute path loaded from config.py by default
         if not os.path.exists(keys_dir):
             return []
             
